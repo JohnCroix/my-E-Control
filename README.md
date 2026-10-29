@@ -1,8 +1,10 @@
-# my E-Control
+# my E-Control – Strommesswerte als CSV & Auswertungs-Report
 
 Lade deine Strommesswerte (Smart Meter) aus dem [eService-Portal der Netz OÖ](https://eservice.netzooe.at)
 als CSV – Tagesverbrauch und 15-Minuten-Werte, **inkrementell**: Es werden nur Tage
-geladen, deren Daten noch nicht lokal vorhanden sind.
+geladen, deren Daten noch nicht lokal vorhanden sind. Aus dem 15-Minuten-Archiv
+erzeugt der **Report** ([`report.py`](#auswertung-reportpy)) Monatsberichte,
+Lastprofil-Heatmaps und Empfehlungen zu den neuen Netzentgeltregeln (SNE-G-V).
 
 > Inoffizielles Community-Projekt, nicht mit der Netz Oberösterreich GmbH verbunden.
 
