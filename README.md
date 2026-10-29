@@ -12,6 +12,7 @@ geladen, deren Daten noch nicht lokal vorhanden sind.
 - Tagesverbrauch (kWh/Tag) als CSV, eine Datei pro Kalendertag + Gesamt-CSV
 - 15-Minuten-Werte (96 Intervalle/Tag) als optionales Archiv
 - `--latest`: aktueller Verbrauch der letzten 15 Minuten, ohne Download
+- `report.py`: Monatsbericht (Leistungsspitzen) + Lastprofil-Heatmaps als HTML
 - Keine externen Abhängigkeiten (nur Python-Standardbibliothek)
 - Funktioniert mit jedem Scheduler (Cron, CI, n8n, …)
 
@@ -100,6 +101,28 @@ Tagesverbrauch bisher (28.10.2026): 12,664 kWh (96/96 Viertelstunden)
 
 Der aktuelle Tag erscheint, sobald Netz OÖ die Messwerte übermittelt hat
 (meist am Folgetag gegen Mittag).
+
+## Auswertung (SNE-G-V / neue Netzentgeltregeln)
+
+`report.py` erzeugt aus dem 15-Minuten-Archiv einen Monatsbericht und
+Lastprofil-Heatmaps – passend zur neuen E-Control-Verordnung (SNE-G-V, ab 2027),
+bei der der **höchste 15-Minuten-Leistungswert pro Monat** die Basis des künftigen
+Leistungspreises ist:
+
+```bash
+python3 report.py                 # Bericht für alle Zählpunkte + HTML-Dashboard
+python3 report.py --month 2026-02 # Detail-Heatmap für einen bestimmten Monat
+python3 report.py --no-html       # nur Konsolenausgabe
+```
+
+- **Monatsbericht:** Spitze (kW) je Monat mit Zeitpunkt, Verbrauch (kWh), sowie
+  Vergleich zum Vormonat und zum Vorjahr
+- **Jahresprofil:** Ø Leistung (kW) je Monat × Stunde als Heatmap
+- **Monatsprofil:** max. Leistung (kW) je Tag × Stunde als Heatmap – zeigt
+  Spitzen-Cluster (z. B. „samstags 11 Uhr“)
+
+Das HTML-Dashboard (`<Zählpunkt>/report.html`) ist eine einzelne, eigenständige
+Datei ohne externe Abhängigkeiten – einfach im Browser öffnen (offline nutzbar).
 
 ## Automatisierung (Cron)
 
