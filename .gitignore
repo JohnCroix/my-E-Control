@@ -1,0 +1,16 @@
+# Zugangsdaten / Lokale Konfiguration
+.env
+
+# Heruntergeladene Messdaten (personenbezogen)
+data/
+
+# Logs & Analyse-Artefakte
+*.log
+.work/
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / Editor
+.DS_Store
