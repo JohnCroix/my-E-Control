@@ -28,8 +28,18 @@ geladen, deren Daten noch nicht lokal vorhanden sind.
 git clone https://github.com/JohnCroix/my-E-Control.git
 cd my-E-Control
 cp .env.example .env      # Zugangsdaten eintragen
-python3 download_readings.py
+python3 download_readings.py                 # startet mit dem Tages-Archiv
 ```
+
+Optional ein 15-Minuten-Archiv auch für die Vergangenheit nachladen
+und danach den Auswertungs-Bericht erzeugen:
+
+```bash
+python3 download_readings.py --include-qh    # 15-Minuten-Werte (neu + historisch)
+python3 report.py                            # Monatsbericht + HTML-Dashboard
+```
+
+> `report.py` benötigt das 15-Minuten-Archiv (`days15/`) – das lädt `--include-qh`.
 
 ## Nutzung
 
@@ -65,9 +75,10 @@ data/readings/
 └── <Zählpunkt-MA>/                       # ein Ordner pro Zähler
     ├── all_days.csv                      # Tageswerte, alle Tage
     ├── days/2026-10-28.csv               # ein File pro Tag (kWh)
-    ├── days15/2026-10-28.csv              # 15-Minuten-Werte (nur mit --include-qh)
-    ├── all_15min.csv                      # 15-Minuten-Werte, alle Tage
-    └── months/2026-02.csv                 # Monatswerte bei Tageswert-Lücken
+    ├── days15/2026-10-28.csv             # 15-Minuten-Werte (nur mit --include-qh)
+    ├── all_15min.csv                     # 15-Minuten-Werte, alle Tage
+    ├── months/2026-02.csv                # Monatswerte bei Tageswert-Lücken
+    └── report.html                       # Auswertung (report.py): Spitzen + Heatmaps
 ```
 
 CSV-Format (Semikolon, deutsches Dezimalformat, UTF-8 mit BOM):
@@ -112,6 +123,7 @@ Leistungspreises ist:
 ```bash
 python3 report.py                 # Bericht für alle Zählpunkte + HTML-Dashboard
 python3 report.py --month 2026-02 # Detail-Heatmap für einen bestimmten Monat
+python3 report.py --year 2025     # Jahresprofil eines anderen Jahres
 python3 report.py --no-html       # nur Konsolenausgabe
 ```
 
@@ -130,9 +142,10 @@ Datei ohne externe Abhängigkeiten – einfach im Browser öffnen (offline nutzb
 15 8 * * * /pfad/zu/my-E-Control/sync.sh
 ```
 
-`sync.sh` ruft das Skript auf und schreibt das Log nach `sync.log`. Für tagesaktuelle
-15-Minuten-Werte kann `--latest` (z. B. alle 15 Minuten) in den Scheduler – z. B. auch
-als n8n-Workflow – eingebunden werden.
+`sync.sh` aktualisiert Tages- **und** 15-Minuten-Archiv (`--include-qh`) und schreibt
+das Log nach `sync.log`. Für den aktuellen Verbrauch der letzten 15 Minuten kann
+`--latest` (z. B. alle 15 Minuten) zusätzlich in den Scheduler – z. B. auch als
+n8n-Workflow – eingebunden werden.
 
 ## Wie es funktioniert
 
