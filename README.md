@@ -113,12 +113,10 @@ Tagesverbrauch bisher (28.10.2026): 12,664 kWh (96/96 Viertelstunden)
 Der aktuelle Tag erscheint, sobald Netz OÖ die Messwerte übermittelt hat
 (meist am Folgetag gegen Mittag).
 
-## Auswertung (SNE-G-V / neue Netzentgeltregeln)
+## Auswertung (report.py)
 
 `report.py` erzeugt aus dem 15-Minuten-Archiv einen Monatsbericht und
-Lastprofil-Heatmaps – passend zur neuen E-Control-Verordnung (SNE-G-V, ab 2027),
-bei der der **höchste 15-Minuten-Leistungswert pro Monat** die Basis des künftigen
-Leistungspreises ist:
+Lastprofil-Heatmaps – passend zu den neuen Netzentgeltregeln (siehe unten):
 
 ```bash
 python3 report.py                 # Bericht für alle Zählpunkte + HTML-Dashboard
@@ -127,19 +125,79 @@ python3 report.py --year 2025     # Jahresprofil eines anderen Jahres
 python3 report.py --no-html       # nur Konsolenausgabe
 ```
 
-- **Monatsbericht:** Spitze (kW) je Monat mit Zeitpunkt, Verbrauch (kWh), sowie
-  Vergleich zum Vormonat und zum Vorjahr
+- **Monatsbericht:** höchster 15-Minuten-Leistungswert (kW) je Monat mit Zeitpunkt,
+  Verbrauch (kWh) sowie Vergleich zum Vormonat und zum Vorjahr – die Kennzahl,
+  auf der der künftige Leistungspreis basiert
 - **Jahresprofil:** Ø Leistung (kW) je Monat × Stunde als Heatmap
 - **Monatsprofil:** max. Leistung (kW) je Tag × Stunde als Heatmap – zeigt
   Spitzen-Cluster (z. B. „samstags 11 Uhr“)
 - **Empfehlungen:** faktenbasierte Tipps aus deinen eigenen Daten – wann deine
-  Spitzen entstehen, die günstigen SNAP/WiNAP-Fenster, Verschiebepotenzial am
-  Abend – plus Erklärungen zu den 5 Kernelementen der SNE-G-V und einer
-  Geräte-Tabelle (was läuft wann am besten)
+  Spitzen entstehen, Anteil im SNAP/WiNAP-Fenster, Verschiebepotenzial am Abend,
+  Wallbox-Ladeleistung als größter Hebel – plus Erklärungen zu den 5
+  Kernelementen und einer Geräte-Tabelle (was läuft wann am besten)
 
 Das HTML-Dashboard (`<Zählpunkt>/report.html`) ist eine einzelne, eigenständige
 Datei ohne externe Abhängigkeiten – einfach im Browser öffnen (offline nutzbar).
 Sie enthält die Empfehlungen ganz oben, darunter die Daten-Tabellen als Beleg.
+
+### Demo-Auszug (Beispielausgabe)
+
+Konsolenausgabe von `python3 report.py` (Werte je nach Messhistorie des Zählers):
+
+```text
+=== Zähler AT00… ===
+Monat     Spitze Zeitpunkt            kWh Δ Vor-Monat   Δ Vorjahr
+--------------------------------------------------------------------
+2025-10    4,10 kW 25.10.2025 10:45   354    +0,20 kW    +0,29 kW
+2025-11    5,22 kW 15.11.2025 10:30   664    +1,12 kW    +1,26 kW
+2025-12    5,24 kW 28.12.2025 18:00   729    +0,03 kW    +0,56 kW
+2026-01    5,33 kW 08.01.2026 17:00   793    +0,09 kW    +0,25 kW
+2026-02    5,50 kW 01.02.2026 11:00   576    +0,17 kW    +0,58 kW
+…
+
+Empfehlungen (SNE-G-V / neue Netzentgeltregeln):
+  • Leistungsspitze & Wallbox: höchste Monatsspitze 5,50 kW (Ø 4,26 kW) – ohne
+    11-kW-Ladeereignis. Mit 11-kW-Wallbox + Wärmepumpe (Grundlast) ≈ 13–15 kW →
+    Ladeleistung an den Hausanschluss anpassen, nicht mit Backofen/Boiler stapeln.
+  • Wann deine Spitzen entstehen: am häufigsten Samstag um 11:00 Uhr
+    (typischer Haushaltsstrom); Wärmepumpe läuft als Grundlast unabhängig davon.
+  • Günstige Fenster (SNAP/WiNAP): 9 % im Sommer-Sparfenster (10–16 Uhr),
+    13 % im Winter-Sparfenster (23–5 Uhr); 15 % des Verbrauchs im Abendfenster
+    17–20 Uhr – das größte Verschiebepotenzial (Startzeitvorwahl nutzen).
+  • Entlastete Nachtstunden 01–04 Uhr: Boiler, E-Auto, Speicher dorthin.
+```
+
+Im Browser zeigt das HTML-Dashboard dieselben Zahlen als Tabellen mit
+Farbskala (Heatmaps) und Tooltips je Zelle.
+
+## Neue Netzentgeltregeln – „Neue Regeln für die Energiewende“ (SNE-G-V)
+
+Die [E-Control](https://www.e-control.at/konsumenten/neue-regeln-f%C3%BCr-die-energiewende)
+hat mit der **Systemnutzungsentgelte-Grundsatzverordnung (SNE-G-V)** die Grundlage
+für eine neue Netzentgeltstruktur ab **1. Jänner 2027** geschaffen: Netze besser
+auslasten, Lastspitzen reduzieren, Netzausbau dämpfen (rund 300 Mio. €/Jahr an
+Netzkosten vermeidbar). Für Haushalte bedeutet das: **Netzkosten künftig aktiv
+beeinflussbar über die Wahl der Verbrauchszeiten.**
+
+### Die 5 Kernelemente in Kürze
+
+| # | Element | Kernidee | Auswirkung auf dich |
+|---|---------|----------|---------------------|
+| 1 | **Leistungspreis für alle** | Arbeits-/Leistungspreis schrittweise auf 50:50; Basis: **höchster 15-Minuten-Leistungswert des Monats** | Monatsspitze vermeiden werden belohnt; Übergang bis spätestens 1.7.2028, zunächst 10 kW frei zugestellt |
+| 2 | **Zeitvariable Arbeitspreise** | **SNAP** (Apr–Sep, 10–16 Uhr) und **WiNAP** (Okt–Mär, 23–5 Uhr, ab Okt 2027): −20 % Netz-Arbeitspreis im Fenster | Verbrauch in die Sparfenster legen (Startzeitvorwahl) |
+| 3 | **Flexible Netznutzung** | Opt-in: Netz steuert max. 2×2 h/Tag | Geringere Netzentgelte für zeit-unkritische Verbraucher (Boiler, Speicher) |
+| 4 | **Neues Netzanschlussentgelt** | Einmalige, faire Beiträge; Anreize für netzdienliche Standorte | Bei Wallbox/Wärmepumpe/PV: früh anmelden, gut geplanten Standort wählen |
+| 5 | **Systemdienliche Speicher** | 10 Varianten mit Reduktion/Befreiung von Netzentgelten | Speicher in SNAP/WiNAP laden, abends entladen |
+
+### Wichtige Eckdaten
+
+- SNAP-/WiNAP-Fenster gelten nur, wenn der Netzbetreiber die Smart-Meter-Daten
+  **viertelstündlich** ablesen kann – die Datenbasis, die dieses Projekt archiviert
+- Die konkreten Preise und Fenster legt die Systemnutzungsentgelt-Tarifverordnung
+  (bzw. die Preissheets deines Netzbetreibers) fest; das Projekt bereitet die
+  Kennzahlen dafür auf (15-min-Spitzen, Fenster-Anteile)
+- Diese Darstellung ersetzt keine Energieberatung – Offizielles:
+  [e-control.at – Neue Regeln für die Energiewende](https://www.e-control.at/konsumenten/neue-regeln-f%C3%BCr-die-energiewende)
 
 ## Automatisierung (Cron)
 
