@@ -218,21 +218,22 @@ def advisor_items(facts: dict) -> list[tuple[str, str]]:
     pct = lambda v: f"{100 * v / facts['total']:.0f} %".replace(".", ",")
     hour_name = lambda h: f"{h:02d}–{h + 1:02d} Uhr"
 
-    items.append(("Leistungsspitze im Griff halten",
-                  f"Deine höchste Monatsspitze lag bei {fmt_german(facts['peak_max'])} kW "
-                  f"(Durchschnitt {fmt_german(facts['peak_avg'])} kW, Minimum {fmt_german(facts['peak_min'])} kW). "
-                  + ("Das bleibt klar unter der 10-kW-Zugangsgrenze des neuen Systems – gut."
-                     if not facts['over10'] and facts['peak_max'] < 8 else
-                     "Achtung: Spitzen in Richtung 10 kW (kostenlose Zugangsgrenze) – "
-                     "große Geräte zeitlich staffeln.")
-                  + " Künftig zahlt die höchste 15-Minuten-Spitze des Monats (Leistungspreis)."))
+    items.append(("Leistungsspitze & Wallbox",
+                  f"Deine bisherige höchste Monatsspitze lag bei {fmt_german(facts['peak_max'])} kW "
+                  f"(Ø {fmt_german(facts['peak_avg'])} kW) – darin steckt noch kein 11-kW-Ladeereignis. "
+                  f"Sobald die Wallbox mit 11 kW lädt, bestimmt sie die Monatsspitze: "
+                  f"11 kW + Wärmepumpe (Grundlast ~2–4 kW) ≈ 13–15 kW – über der künftigen "
+                  f"10-kW-Zugangsgrenze. Der Hebel ist das Lade-Management, nicht die Wärmepumpe: "
+                  f"Ladeleistung an den Hausanschluss anpassen (z. B. 6–11 kW), nicht mit "
+                  f"Backofen/Boiler stapeln – dann bleibt die Monatsspitze bei ~11 kW."))
 
     if facts["peak_day"] and facts["peak_hour"] is not None:
         items.append(("Wann deine Spitzen entstehen",
                       f"Deine Monatsspitzen treten am häufigsten {facts['peak_day']} um "
-                      f"{facts['peak_hour']:02d}:00 Uhr auf. An genau diesen Tagen/Stunden "
-                      f"Backofen, Wasserkocher, E-Auto-Laden und Wärmepumpe nicht gleichzeitig "
-                      f"laufen lassen und Ladevorgänge auf später verschieben."))
+                      f"{facts['peak_hour']:02d}:00 Uhr auf – derzeit typischer Haushaltsstrom "
+                      f"(Kochen, Waschen). Die Wärmepumpe läuft davon unabhängig als Grundlast "
+                      f"und lässt sich nicht einfach abschalten; relevant ist, dass keine weiteren "
+                      f"Großverbraucher (Wallbox, Boiler, Trockner) in dasselbe Zeitfenster fallen."))
 
     top = [hour_name(h) for h, _ in facts["hours_top3"]]
     items.append(("Stunden mit höchster Last",
@@ -275,10 +276,15 @@ def advisor_items(facts: dict) -> list[tuple[str, str]]:
 
 
 APPLIANCES = [
-    ("E-Auto (Wallbox)", "3,7–22 kW", "23–05 Uhr (Winter) / 10–16 Uhr (Sommer); nie parallel zu Wärmepumpe + Boiler"),
-    ("Wärmepumpe", "1,5–4 kW", "Zeitprogramm nutzen; nicht mit Wallbox oder Boiler gleichzeitig"),
+    ("E-Auto (Wallbox)", "6–11 kW üblich",
+     "23–05 Uhr (Winter) / 10–16 Uhr (Sommer) + PV-Überschuss; Ladeleistung an den Hausanschluss "
+     "anpassen (3×20/25/35 A), Lade-Management der Wallbox nutzen – das ist der größte Hebel "
+     "für die Monatsspitze"),
+    ("Wärmepumpe", "1,5–4 kW (Grundlast)",
+     "läuft bedarfsabhängig rund um die Uhr – kein Stellhebel; Abstimmung über die "
+     "Wallbox-Ladeleistung bzw. Lastmanagement, nicht durch Abschalten"),
     ("Boiler (Speicher)", "2–3 kW", "Aufheizen in die Nacht bzw. Mittagsfenster legen"),
-    ("Backofen / Ceranfeld", "2–4 kW", "Nicht mit anderen Großverbrauchern kollidieren (Staffelung)"),
+    ("Backofen / Ceranfeld", "2–4 kW", "Nicht mit Wallbox-Laden kollidieren (Staffelung)"),
     ("Waschmaschine / Trockner", "2–3,5 kW", "Startzeitvorwahl auf 10–16 Uhr (Sommer) bzw. 23–05 Uhr (Winter)"),
     ("Geschirrspüler", "1–2 kW", "Nacht- oder Mittagsprogramm"),
 ]
