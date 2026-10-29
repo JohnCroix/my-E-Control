@@ -29,12 +29,24 @@ import calendar
 import glob
 import os
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime
 from html import escape
 
 DATA_DIR = "data/readings"
 KW_PER_KWH_15MIN = 4.0  # kWh/15min → kW
+
+# --- Tarif/Förder-Fenster laut SNE-G-V (E-Control) ---
+SNAP_MONTHS = frozenset({4, 5, 6, 7, 8, 9})            # Sommer-Nieder-Arbeitspreis Apr–Sep
+SNAP_HOURS = frozenset(range(10, 16))                  # 10:00–16:00 Uhr
+WINAP_MONTHS = frozenset({1, 2, 3, 10, 11, 12})        # Winter-Nieder-Arbeitspreis Okt–Mär
+WINAP_HOURS = frozenset(range(23, 24)) | frozenset(range(0, 5))  # 23:00–05:00 Uhr
+EVENING_HOURS = frozenset({17, 18, 19})                # kritische Abendstunden
+MIDDAY_HOURS = frozenset({11, 12, 13})                 # Mittagsfenster
+WEEKDAY_DE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag",
+              "Freitag", "Samstag", "Sonntag"]
+ECONTROL_URL = ("https://www.e-control.at/konsumenten/"
+                "neue-regeln-f%C3%BCr-die-energiewende")
 
 
 # --------------------------------------------------------------------------- #
@@ -160,10 +172,165 @@ def heat_color(ratio: float) -> str:
 
 
 # --------------------------------------------------------------------------- #
+#  Empfehlungen (SNE-G-V)
+# --------------------------------------------------------------------------- #
+def advisor_facts(rows: list[tuple[datetime, float]], months: dict[str, dict]) -> dict:
+    """Kennzahlen für die persönlichen Empfehlungen aus den Messdaten."""
+    total = sum(k for _, k in rows)
+
+    def window(months_: frozenset, hours_: frozenset) -> float:
+        return sum(k for dt, k in rows if dt.month in months_ and dt.hour in hours_)
+
+    # Ø Leistung je Stunde (alle verfügbaren Jahre)
+    hag: dict[int, list] = defaultdict(lambda: [0.0, 0])
+    for dt, kwh in rows:
+        hag[dt.hour][0] += kwh * KW_PER_KWH_15MIN
+        hag[dt.hour][1] += 1
+    hours_avg = sorted(((h, s / n) for h, (s, n) in hag.items()), key=lambda x: -x[1])
+
+    peaks = [m["peak_kw"] for m in months.values()]
+    peak_hour = Counter(m["peak_dt"].hour for m in months.values())
+    peak_day = Counter(WEEKDAY_DE[m["peak_dt"].weekday()] for m in months.values())
+
+    return {
+        "total": total,
+        "snap": window(SNAP_MONTHS, SNAP_HOURS),
+        "winap": window(WINAP_MONTHS, WINAP_HOURS),
+        "evening": window(frozenset(range(1, 13)), EVENING_HOURS),
+        "midday": window(frozenset(range(1, 13)), MIDDAY_HOURS),
+        "hours_top3": hours_avg[:3],
+        "hours_flat3": hours_avg[-3:],
+        "peak_max": max(peaks), "peak_min": min(peaks),
+        "peak_avg": sum(peaks) / len(peaks) if peaks else 0.0,
+        "peak_hour": peak_hour.most_common(1)[0][0] if peak_hour else None,
+        "peak_day": peak_day.most_common(1)[0][0] if peak_day else None,
+        "over10": any(p >= 10.0 for p in peaks),
+    }
+
+
+def fmt_german(value: float, digits: int = 2) -> str:
+    return f"{value:.{digits}f}".replace(".", ",")
+
+
+def advisor_items(facts: dict) -> list[tuple[str, str]]:
+    """Persönliche Empfehlungstexte – (Überschrift, Text) mit echten Zahlen aus den Daten."""
+    items: list[tuple[str, str]] = []
+    pct = lambda v: f"{100 * v / facts['total']:.0f} %".replace(".", ",")
+    hour_name = lambda h: f"{h:02d}–{h + 1:02d} Uhr"
+
+    items.append(("Leistungsspitze im Griff halten",
+                  f"Deine höchste Monatsspitze lag bei {fmt_german(facts['peak_max'])} kW "
+                  f"(Durchschnitt {fmt_german(facts['peak_avg'])} kW, Minimum {fmt_german(facts['peak_min'])} kW). "
+                  + ("Das bleibt klar unter der 10-kW-Zugangsgrenze des neuen Systems – gut."
+                     if not facts['over10'] and facts['peak_max'] < 8 else
+                     "Achtung: Spitzen in Richtung 10 kW (kostenlose Zugangsgrenze) – "
+                     "große Geräte zeitlich staffeln.")
+                  + " Künftig zahlt die höchste 15-Minuten-Spitze des Monats (Leistungspreis)."))
+
+    if facts["peak_day"] and facts["peak_hour"] is not None:
+        items.append(("Wann deine Spitzen entstehen",
+                      f"Deine Monatsspitzen treten am häufigsten {facts['peak_day']} um "
+                      f"{facts['peak_hour']:02d}:00 Uhr auf. An genau diesen Tagen/Stunden "
+                      f"Backofen, Wasserkocher, E-Auto-Laden und Wärmepumpe nicht gleichzeitig "
+                      f"laufen lassen und Ladevorgänge auf später verschieben."))
+
+    top = [hour_name(h) for h, _ in facts["hours_top3"]]
+    items.append(("Stunden mit höchster Last",
+                  f"Deine am stärksten ausgelasteten Stunden sind {', '.join(top)}. "
+                  f"Hier konzentrieren sich Koch- und Haushaltsstrom – Geräte mit "
+                  f"Startzeitvorwahl (Spülmaschine, Waschmaschine, Trockner) auf "
+                  f"andere Zeiten legen."))
+
+    flat = [hour_name(h) for h, _ in facts["hours_flat3"]]
+    items.append(("Entlastete Nachtstunden",
+                  f"Am schwächsten belastet sind {', '.join(flat)}. Zeit-unkritische "
+                  f"Verbraucher (Boiler-Vorheizen, E-Auto, Akku-Speicher) gehören dorthin "
+                  f"bzw. in die günstigen Fenster unten."))
+
+    items.append(("Günstige Fenster nutzen (SNAP/WiNAP)",
+                  f"Schon jetzt liegen {fmt_german(100 * facts['snap'] / facts['total'])} % im "
+                  f"Sommer-Sparfenster (Apr–Sep 10–16 Uhr, −20 % Netz-Arbeitspreis) und "
+                  f"{fmt_german(100 * facts['winap'] / facts['total'])} % im Winter-Sparfenster "
+                  f"(Okt–Mär 23–5 Uhr). Im Abendfenster 17–20 Uhr verbrauchst du "
+                  f"{fmt_german(facts['evening'])} kWh ({pct(facts['evening'])} des Gesamtverbrauchs) – "
+                  f"das ist das größte Verschiebepotenzial. Waschmaschine, Trockner und "
+                  f"Geschirrspüler per Startzeitvorwahl in die Sparfenster legen."))
+
+    items.append(("Flexible Entnahme (Opt-in)",
+                  f"Wer sich auf flexible Netznutzung einlässt (max. 2×2 Stunden pro Tag "
+                  f"steuerbar), bekommt günstigere Netzentgelte. Sinnvoll für Verbraucher ohne "
+                  f"Zeitbindung (Boiler, Speicher, Heizstab) – prüfen, ob dein Netzbetreiber "
+                  f"das anbietet."))
+
+    items.append(("Speicher systemdienlich betreiben",
+                  f"Batterie-Speicher in den günstigen Fenstern laden (SNAP/WiNAP), abends "
+                  f"entladen. Systemdienlicher Betrieb öffnet 10 Vergünstigungs-Varianten "
+                  f"(Reduktion/Befreiung von Netznutzungs- und Netzverlustentgelt)."))
+
+    items.append(("Neuanschlüsse rechtzeitig planen",
+                  f"Bei Wallbox, Wärmepumpe oder PV-Anlage: Anmeldung frühzeitig, "
+                  f"netzdienlicher Standort (vorhandene Netzkapazität) wählt – das neue "
+                  f"Netzanschlussentgelt belohnt genau das."))
+    return items
+
+
+APPLIANCES = [
+    ("E-Auto (Wallbox)", "3,7–22 kW", "23–05 Uhr (Winter) / 10–16 Uhr (Sommer); nie parallel zu Wärmepumpe + Boiler"),
+    ("Wärmepumpe", "1,5–4 kW", "Zeitprogramm nutzen; nicht mit Wallbox oder Boiler gleichzeitig"),
+    ("Boiler (Speicher)", "2–3 kW", "Aufheizen in die Nacht bzw. Mittagsfenster legen"),
+    ("Backofen / Ceranfeld", "2–4 kW", "Nicht mit anderen Großverbrauchern kollidieren (Staffelung)"),
+    ("Waschmaschine / Trockner", "2–3,5 kW", "Startzeitvorwahl auf 10–16 Uhr (Sommer) bzw. 23–05 Uhr (Winter)"),
+    ("Geschirrspüler", "1–2 kW", "Nacht- oder Mittagsprogramm"),
+]
+
+FIVE_ELEMENTS = [
+    ("1. Leistungspreis für alle",
+     "Monatliche 15-min-Leistungsspitze wird bepreist; Ziel 50:50 Arbeits-/Leistungspreis bis 2030",
+     "Spitzen vermeiden: große Verbraucher staffeln; 15-min-Werte (↑ Heatmaps) beobachten"),
+    ("2. Zeitvariable Arbeitspreise",
+     "SNAP (Apr–Sep, 10–16 Uhr) und WiNAP (Okt–Mär, 23–05 Uhr), −20 % Netz-Arbeitspreis",
+     "Verbrauch per Startzeitvorwahl in die Sparfenster legen"),
+    ("3. Flexible Netznutzung",
+     "Opt-in: Netz steuert max. 2×2 h/Tag, dafür günstigere Netzentgelte",
+     "Zeit-unkritische Verbraucher (Boiler, Speicher) anmelden"),
+    ("4. Neues Netzanschlussentgelt",
+     "Einmalige, faire Beiträge; Anreize für netzdienliche Standorte",
+     "Wallbox/WP/PV früh anmelden; Standort mit Netzkapazität wählen"),
+    ("5. Systemdienliche Speicher",
+     "10 Varianten mit Reduktion/Befreiung von Netzentgelten",
+     "Speicher in SNAP/WiNAP laden, abends entladen"),
+]
+
+
+# --------------------------------------------------------------------------- #
 #  HTML-Dashboard
 # --------------------------------------------------------------------------- #
+def _advisor_html(facts: dict) -> str:
+    """Empfehlungs-Sektion fürs HTML-Dashboard (faktenbasiert, erklärt die SNE-G-V)."""
+    items = advisor_items(facts)
+    tips = []
+    for i, (title, text) in enumerate(items):
+        tips.append(f"<li{' class="warn"' if i == 0 else ''}><b>{escape(title)}:</b> {escape(text)}</li>")
+    app_rows = "".join(
+        f"<tr><td>{escape(g)}</td><td>{escape(p)}</td><td>{escape(t)}</td></tr>"
+        for g, p, t in APPLIANCES)
+    el_rows = "".join(
+        f"<tr><td><b>{escape(n)}</b></td><td>{escape(k)}</td><td>{escape(a)}</td></tr>"
+        for n, k, a in FIVE_ELEMENTS)
+    return f"""<h2>Empfehlungen &amp; Erklärungen zur neuen Netzentgelt-Verordnung (SNE-G-V)</h2>
+<p class="muted">Basierend auf deinen Messdaten · offizielle Infos: <a href="{ECONTROL_URL}">
+e-control.at – Neue Regeln für die Energiewende</a></p>
+<ul class="tips">{''.join(tips)}</ul>
+<h3>Geräte &amp; empfohlene Zeitfenster</h3>
+<table class="g"><thead><tr><th>Gerät</th><th>typ. Leistung</th><th>Empfehlung</th></tr></thead>
+<tbody>{app_rows}</tbody></table>
+<h3>Die 5 Kernelemente – kurz erklärt</h3>
+<table class="g"><thead><tr><th>Element</th><th>Kernidee</th><th>Was du tun kannst</th></tr></thead>
+<tbody>{el_rows}</tbody></table>"""
+
+
 def build_html(meter_point: str, months: dict[str, dict], rows: list[tuple[datetime, float]],
-               focus_month: str | None, year: int) -> str:
+               focus_month: str | None, year: int, facts: dict) -> str:
     keys = sorted(months)
     y_keys = [k for k in keys if int(k[:4]) == year]
 
@@ -243,7 +410,14 @@ def build_html(meter_point: str, months: dict[str, dict], rows: list[tuple[datet
     td.empty{background:#fbfbfb}
     .down{color:#c0392b}.up{color:#27ae60}
     p.muted{color:#666;font-size:12px}
+    ul.tips{list-style:none;padding:0}
+    ul.tips li{background:#f7f9fb;border-left:4px solid #2ecc71;padding:8px 12px;
+               margin:6px 0;border-radius:0 4px 4px 0;font-size:14px;line-height:1.45}
+    ul.tips li.warn{border-left-color:#e67e22}
+    table.g{text-align:left}
+    table.g th, table.g td{text-align:left;padding:4px 10px}
     """
+    advisor_html = _advisor_html(facts)
     now = datetime.now().strftime("%d.%m.%Y %H:%M")
     return f"""<!doctype html>
 <html lang="de"><head><meta charset="utf-8">
@@ -252,6 +426,7 @@ def build_html(meter_point: str, months: dict[str, dict], rows: list[tuple[datet
 <h1>Stromlast-Auswertung – Zähler {escape(meter_point)}</h1>
 <p class="muted">Stand: {now} · Quelle: lokales 15-Minuten-Archiv (kWh/15min → kW × 4) ·
 Basis für den künftigen Leistungspreis (SNE-G-V): höchster 15-Minuten-Leistungswert je Monat</p>
+{advisor_html}
 <h2>Monatsübersicht – Leistungsspitzen (15&nbsp;min)</h2>
 {peak_table}
 <h2>Jahresprofil {year} – Ø Leistung (kW) je Monat × Stunde</h2>
@@ -301,8 +476,13 @@ def main(argv: list[str] | None = None) -> int:
         if focus_month:
             print_month_detail(months, focus_month)
 
+        facts = advisor_facts(rows, months)
+        print("\nEmpfehlungen (SNE-G-V / neue Netzentgeltregeln):")
+        for title, text in advisor_items(facts):
+            print(f"  • {title}: {text}")
+
         if not args.no_html:
-            html = build_html(meter_point, months, rows, focus_month, args.year)
+            html = build_html(meter_point, months, rows, focus_month, args.year, facts)
             out = os.path.join(meter_dir, "report.html")
             with open(out, "w", encoding="utf-8") as f:
                 f.write(html)

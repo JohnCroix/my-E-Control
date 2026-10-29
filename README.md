@@ -132,9 +132,14 @@ python3 report.py --no-html       # nur Konsolenausgabe
 - **Jahresprofil:** Ø Leistung (kW) je Monat × Stunde als Heatmap
 - **Monatsprofil:** max. Leistung (kW) je Tag × Stunde als Heatmap – zeigt
   Spitzen-Cluster (z. B. „samstags 11 Uhr“)
+- **Empfehlungen:** faktenbasierte Tipps aus deinen eigenen Daten – wann deine
+  Spitzen entstehen, die günstigen SNAP/WiNAP-Fenster, Verschiebepotenzial am
+  Abend – plus Erklärungen zu den 5 Kernelementen der SNE-G-V und einer
+  Geräte-Tabelle (was läuft wann am besten)
 
 Das HTML-Dashboard (`<Zählpunkt>/report.html`) ist eine einzelne, eigenständige
 Datei ohne externe Abhängigkeiten – einfach im Browser öffnen (offline nutzbar).
+Sie enthält die Empfehlungen ganz oben, darunter die Daten-Tabellen als Beleg.
 
 ## Automatisierung (Cron)
 
