@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# EControl – Netz-OÖ-Messwerte-Update (für Cron / n8n Execute Command)
+# my E-Control – Netz-OÖ-Messwerte-Update (für Cron & Co)
 # Ruft download_readings.py auf und schreibt Log nach sync.log
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
