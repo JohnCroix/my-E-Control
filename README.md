@@ -24,7 +24,7 @@ geladen, deren Daten noch nicht lokal vorhanden sind.
 ## Installation
 
 ```bash
-git clone https://github.com/<dein-user>/my-E-Control.git
+git clone https://github.com/JohnCroix/my-E-Control.git
 cd my-E-Control
 cp .env.example .env      # Zugangsdaten eintragen
 python3 download_readings.py
